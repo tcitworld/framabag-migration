@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 ## -*- coding: utf-8 -*-
 
-import os, sqlite3, json, random
+import os, sqlite3, json, random, string, time
 
 class Entry:
     def __init__(self, id, title, url, is_read, is_fav, content):
@@ -29,62 +29,92 @@ def serialiseur_perso(obj):
     raise TypeError(repr(obj) + " n'est pas sérialisable !")
 
 def exportEntries(id, collection):
-    with open("export-" + str(id) + ".json", "w") as fichier:
+    filename = "json/export-" + str(id) + ".json"
+    with open(filename, "w") as fichier:
         json.dump(collection, fichier, default=serialiseur_perso)
+    print("Exported file " + filename)
 
+def fileExists(id):
+    return os.path.isfile("json/export" + str(id) + ".json")
 
 def fetchEntries(id, path):
-    conn = sqlite3.connect(path + '/db/poche.sqlite')
+    if not fileExists(id):
+        conn = sqlite3.connect('../u/' + path + '/db/poche.sqlite')
 
-    c = conn.cursor()
+        c = conn.cursor()
 
-    c.execute('SELECT e.id, e.title, e.url, e.is_read, e.is_fav, e.content, t.value from entries e left join tags_entries te on e.id = te.entry_id left join tags t on te.tag_id = t.id')
+        c.execute('SELECT e.id, e.title, e.url, e.is_read, e.is_fav, e.content, t.value from entries e left join tags_entries te on e.id = te.entry_id left join tags t on te.tag_id = t.id')
 
-    entries = c.fetchall()
+        entries = c.fetchall()
 
-    entry_previous = None
-    entries_collection = []
-    for entry in entries:
-        if (entry_previous != None and entry[0] != entry_previous.id):
-            entryObj = Entry(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5])
-            entry_previous = entryObj
-            if (entry[6] != None):
-                entryObj.addTag(entry[6])
-            entries_collection.append(entryObj)
-        elif entry_previous != None and entry[0] == entry_previous.id and entry[6] != None:
-            entry_previous.addTag(entry[6])
-        else:
-            entryObj = Entry(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5])
-            entry_previous = entryObj
-            if (entry[6] != None):
-                entryObj.addTag(entry[6])
-            entries_collection.append(entryObj)
-    exportEntries(id, entries_collection)
-    conn.close()
+        entry_previous = None
+        entries_collection = []
+        for entry in entries:
+            if (entry_previous != None and entry[0] != entry_previous.id):
+                entryObj = Entry(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5])
+                entry_previous = entryObj
+                if (entry[6] != None):
+                    entryObj.addTag(entry[6])
+                entries_collection.append(entryObj)
+            elif entry_previous != None and entry[0] == entry_previous.id and entry[6] != None:
+                entry_previous.addTag(entry[6])
+            else:
+                entryObj = Entry(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5])
+                entry_previous = entryObj
+                if (entry[6] != None):
+                    entryObj.addTag(entry[6])
+                entries_collection.append(entryObj)
+        exportEntries(id, entries_collection)
+        conn.close()
+    else:
+        print("File already exists... Skipping")
 
 def importEntries(id):
-    os.chdir("wallabag/")
-    os.system("bin/console wallabag:import " + str(id) + " ../export-" + str(id) + ".json")
+    filename = "json/export-" + str(id) + ".json"
+    print("Trying to import file " + filename)
+    os.system("wallabag/bin/console wallabag:import " + str(id) + " " + filename + " --env=prod")
 
-def createAccount(path):
-    conn = sqlite3.connect(path + '/db/poche.sqlite')
+
+def createAccount(path, id):
+    conn = sqlite3.connect('../u/' + path + '/db/poche.sqlite')
     c = conn.cursor()
 
     c.execute('SELECT username, email from users')
 
     user = c.fetchone()
-    password = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(N))
+    username = user[0]
+    mail = user[1]
+    if mail == '':
+        mail = 'tcit@tcit.fr'
+    if username == '':
+        username = 'user-' + str(id)
+    password = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
 
-    os.chdir("wallabag/")
-    os.system("bin/console fos:user:create " + user[0] + " " + user[1] + " " + password)
+    if password == '':
+        password = 'mdp'
 
-folderList = next(os.walk('.'))[1]
+    print('user : ' + username)
+    print('mail : ' + mail)
+    print('password : ' + password)
+
+    os.system("wallabag/bin/console fos:user:create " + username + " " + mail + " " + password + " --env=prod")
+    conn.close()
+
+folderList = next(os.walk('../u/'))[1]
+errors = []
 print(str(len(folderList)) + " accounts to proceed")
 for i in range(0, len(folderList)):
+    time.sleep(1)
     print("Creating account...")
-    createAccount(folderList[i])
-    print("Starting to export entries...")
-    fetchEntries(i+1, folderList[i])
-    print("Starting to import entries...")
-    importEntries(i+1)
+    if not fileExists(i+1):
+        createAccount(folderList[i], i+1)
+        print("Starting to export entries...")
+    try:
+        fetchEntries(i+1, folderList[i])
+        print("Starting to import entries...")
+        importEntries(i+1)
+    except sqlite3.OperationalError:
+        print("There was an issue while retrieving entries. Adding " + folderList[i] + " to the list of errored accounts")
+        errors.append(folderList[i])
     print("Account " + str(i+1) + " on " + str(len(folderList) +1) + " processed")
+
