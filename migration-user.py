@@ -5,14 +5,14 @@ import os, sqlite3, json, random, string, time, sys
 from Entry import Entry, serialiseur_perso
 
 def exportEntries(name, collection):
-    filename = "json/" + str(name) + ".json"
+    filename = "jsonsingle/" + str(name) + ".json"
     with open(filename, "w") as fichier:
         json.dump(collection, fichier, default=serialiseur_perso)
     print("Exported file " + filename)
 
 def fileExists(name):
-    print("File json/" + str(name) + ".json exists")
-    return os.path.isfile("json/" + str(name) + ".json")
+    print("File jsonsingle/" + str(name) + ".json exists")
+    return os.path.isfile("jsonsingle/" + str(name) + ".json")
 
 def fetchEntries(path_db, path_export):
     conn = sqlite3.connect(path_db)
