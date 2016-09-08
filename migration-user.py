@@ -44,6 +44,6 @@ def fetchEntries(path_db, path_export):
     conn.close()
 path = sys.argv[1:]
 try:
-    fetchEntries(path[0], 'test')
+    fetchEntries(path[0], path[1])
 except sqlite3.OperationalError:
     print("Error while retrieving entries. Adding " + folderList[i] + "to the list of errored accounts")
